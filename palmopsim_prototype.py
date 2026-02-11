@@ -9,7 +9,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # ------------------------
-# Plantation Configuration
+# Scenario Configuration (11/2/2026)
+# ------------------------
+SCENARIO_NAME = "Conservative"
+YIELD_ADJUSTMENT = 0.10 #-10% yield assumption
+
+# ------------------------
+# Plantation Configuration (10/2/2026)
 # ------------------------
 
 NUM_BLOCKS = 10
@@ -19,7 +25,7 @@ BLOCK_AREA_HA = 25 # assume uniform block size
 INITIAL_AGE_RANGE = (3, 25) # years
 
 # ------------------------
-# Define Yield Behaviour
+# Define Yield Behaviour (10/2/2026)
 # ------------------------
 
 # Base FFB yield by age class (t/ha/year)
@@ -36,7 +42,7 @@ def base_yield_by_age(age):
         return 15
     
 # ------------------------
-# Initialize Plantation Blocks
+# Initialize Plantation Blocks (10/2/2026)
 # ------------------------
 
 np.random.seed(42) # Reproducability
@@ -54,7 +60,8 @@ for block_id in range (1, NUM_BLOCKS + 1):
     blocks.append(block)
 
 # ------------------------
-# Create Simulation Loop
+# Create Simulation Loop (10/2/2026)
+# Modification (11/2/2026): Modify simulation loop slightly (Line 76 & 77)
 # ------------------------
 
 results = []
@@ -66,7 +73,8 @@ for year in range(1, SIMULATION_YEARS + 1):
 
         # Introduce variability (± 10%)
         variability = np.random.normal(1.0, 0.1)
-        yield_t_ha = max(base_yield * variability, 0)
+        adjusted_yield = base_yield * (1 + YIELD_ADJUSTMENT)
+        yield_t_ha = max(adjusted_yield * variability, 0)
 
         total_ffb = yield_t_ha * block["Area_ha"]
 
@@ -82,18 +90,39 @@ for year in range(1, SIMULATION_YEARS + 1):
 
 
 # ------------------------
-# Convert results into a table
+# Convert results into a table (10/2/2026)
 # ------------------------
 df = pd.DataFrame(results)
 
 # ------------------------
-# Export to Excel
-# Note (10/2/2026): This uses openpyxl to write excel files
+# Management Summary (11/2/2026)
 # ------------------------
-df.to_excel ("PalmOpsSim_FFB_Results.xlsx", index=False)
+total_ffb = df["Total_FFB_t"].sum()
+avg_yield = df["FFB_t_ha"].mean()
+
+old_blocks = df[df["Age"] > 25]["Block"].nunique()
+
+summary_text = f"""
+PalmOpsSim Prototype Summary ({SCENARIO_NAME} Scenario)
+
+- Total simulated FFB Production: {total_ffb:.1f} tonnes
+- Average FFB yield: {avg_yield: .2f} t/ha
+- Number of blocks above 25 years old: {old_blocks}
+
+This simulation provides a high-level indication of yield trends and supports conservative estate-level planning decisions
+"""
+
+print (summary_text)
+
+# Export to Excel (10/2/2026)
+# Note (10/2/2026): This uses openpyxl to write excel files
+# Addition (11/2/2026): Modified to save excel export files properly
+# ------------------------
+output_file = f"PalmOpsSim_FFB_Results_{SCENARIO_NAME}.xlsx"
+df.to_excel (output_file, index=False)
 
 # ------------------------
-# Create Simple Monitoring Plots
+# Create Simple Monitoring Plots (10/2/2026)
 # Bugfix (10/2/2026): Removed plt.figure() from block-level yield distribution as df.boxplot() creates its own figure
 # ------------------------
 
