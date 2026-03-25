@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from palmopsim_model import run_simulation
+from palmopsim_model import run_simulation, run_sensitivity_analysis, get_estate_age_distribution
 
 # ------------------------
 # Page Configuration (15/2/2026)
@@ -16,7 +16,10 @@ st.set_page_config(
 # ------------------------
 st.title("PalmOpsSim")
 st.subheader("Operational Simulation Dashboard")
-
+st.markdown(
+    "Configure simulation parameters in the sidebar. Run one or more scenarios to compare"
+    "long-term FFB production, sensitive to key inputs, and estate age health."
+)
 # ------------------------
 # Sidebar - Simulation Configuration (15/2/2026)
 # Phase 5 Implementation (16/2/2026): Added harvest interval and fertilizer application
@@ -32,13 +35,15 @@ scenarios = st.sidebar.multiselect(
     ["Conservative", "Moderate", "Aggressive"]
 )
 
-# if scenarios == "Conservative":
-#     st.sidebar.caption("Lower yield assumption (-10%). Risk-averse planning.")
-# elif scenario == "Moderate":
-#     st.sidebar.caption("Baseline yield assumption (0%). Standard operations.")
-# elif scenario == "Aggressive":
-#     st.sidebar.caption("Higher yield assumption (+10%). Optimistic strategy.")
+scenario_descriptions = {
+    "Conservative": "Lower yield assumption (-10%). Risk-averse planning.",
+    "Moderate": "Baseline yield assumption (0%). Standard operations.",
+    "Aggressive": "Higher yield assumption (+10%). Optimistic strategy."
+}
+for s in scenarios:
+    st.sidebar.caption(f"{s}: {scenario_descriptions[s]}")
 
+st.sidebar.markdown("**Estate Configuration**")
 simulation_years = st.sidebar.number_input(
     "Simulation Duration (Years)",
     min_value = 1,
@@ -53,23 +58,28 @@ num_blocks = st.sidebar.number_input(
     value = 10
 )
 
-harvest_interval = st.sidebar.slider(
-    "Harvest Interval (Months)",
-    min_value = 6,
-    max_value = 12,
-    value = 12,
-    step = 1
-)
+st.sidebar.markdown("**Management Inputs**")
 
 fertilizer = st.sidebar.slider(
     "Fertilizer Effect (%)",
     min_value = -10, # under-fertilization reduces yield
     max_value = 20, # over-fertilization can increase yield
     value = 0,
-    step = 1   
+    step = 1,
+    help = "Nutrient management input. Negative = under-fertilized, 0 = standard, positive = enhanced application. Follows diminishing returns."   
+)
+
+harvest_interval = st.sidebar.slider(
+    "Harvest Interval (Months)",
+    min_value = 6,
+    max_value = 12,
+    value = 12,
+    step = 1,
+    help = "How frequently blocks are harvested. Intervals longer than 12 months reduce harvest efficiency due to over-ripening losses."
 )
 
 # Phase 5 Implementation (18/2/2026): added climate and pest slider
+st.sidebar.markdown("**Environmental Conditions**")
 climate_slider = st.sidebar.slider(
     "Climate Factor Adjustment (%)",
     min_value = -20,
@@ -112,6 +122,19 @@ if run_button:
             climate_slider = climate_slider, # Pass slider value
             pest_slider = pest_slider # Pass slider value
         )
+        
+        # Phase 6 Implementation (21/2/2026): Added sensitivity function
+        selected_scenario = scenarios[0]
+
+        base_params = {
+            "scenario_name": selected_scenario,
+            "simulation_years": simulation_years,
+            "num_blocks": num_blocks,
+            "fertilizer": fertilizer,
+            "harvest_interval": harvest_interval,
+            "climate_slider": climate_slider,
+            "pest_slider": pest_slider
+        }
 
         # KPI Metrics
         # Phase 5 Implementation (17/2/2026): Add KPI Comparison Table
@@ -144,11 +167,13 @@ if run_button:
             x = "Year",
             y = scenarios,
             labels = {"value": "Total FFB (t)", "variable": "Scenario"},
-            title = "Annual FFB Production Comparison"
+            title = "Annual FFB Production Comparison",
+            markers = True
         )
-
+        
         # Force hover to show 2 decimals
         fig.update_traces(hovertemplate = 'Year: %{x}<br>Total FFB(t): %{y:.2f}')
+        fig.update_layout(yaxis_tickformat = "~s")
 
         st.plotly_chart(fig, width = "stretch")
 
@@ -174,5 +199,90 @@ if run_button:
             "PalmOpsSim_Results.csv",
             "text/csv"
         )
+
+        # Phase 6 implementation (21/2/2026): Sensitivity Section
+        st.markdown("---")
+        st.subheader("Sensitivity Analysis (±10%)")
+
+        for scenario in scenarios:
+            st.caption(f"Based on: {scenario} scenario")
+
+            base_params ["scenario_name"] = scenario
+            scenario_sensitivity = []
+
+            # Fertilizer sensitivity (±10%)
+            scenario_sensitivity.append(
+                run_sensitivity_analysis(
+                    base_params,
+                    "fertilizer",
+                    fertilizer - 10,
+                    fertilizer + 10
+                )
+            )
+
+            # Climate sensitivity (±10%)
+            scenario_sensitivity.append(
+                run_sensitivity_analysis(
+                    base_params,
+                    "climate_slider",
+                    climate_slider - 10,
+                    climate_slider + 10
+                )
+            )
+
+            # Pest sensitivity (±5% to keep realistic bounds)
+            scenario_sensitivity.append(
+                run_sensitivity_analysis(
+                    base_params,
+                    "pest_slider",
+                    max(0, pest_slider - 5),
+                    pest_slider + 5
+                )
+            )
+
+            st.dataframe(pd.DataFrame(scenario_sensitivity))
+            st.caption(
+                "Low_Change_%: impact of reducing the variable by the test amount. "
+                "High_Change_%: impact of increasing it. Values show % change vs baseline total FFB."
+            )
+
+        # Phase 6 Implementation (1/3/2026): Estate Age Health Indicator
+        st.markdown("---")
+        st.subheader("Estate Age Health (Final Year)")
+
+        selected_results = results_dict[selected_scenario]
+
+        age_distribution = get_estate_age_distribution(selected_results["dataframe"])
+
+        age_df = pd.DataFrame(
+            age_distribution.items(),
+            columns = ["Age Category", "Percentage (%)"]
+        )
+
+        st.dataframe(age_df)
+
+        # Phase 6 Implementation (1/3/2026): Replanting Strategy Comparison
+        st.markdown("---")
+        st.subheader("Replanting Strategy Comparison")
+
+        replant_strategies = [0.03, 0.05, 0.08]
+        strategy_results = []
+
+        for rate in replant_strategies:
+
+            strategy_params = base_params.copy()
+            strategy_params ["replant_rate"] = rate
+
+            sim_results = run_simulation(**strategy_params)
+
+            strategy_results.append({
+                "Replant Rate (%)": int(rate * 100),
+                "Total FFB (t)": sim_results["total_ffb"],
+                "Average Yield (t/ha)": sim_results["average_yield"]
+            })
+        
+        strategy_df = pd.DataFrame(strategy_results)
+        st.dataframe(strategy_df)
+        
 st.markdown("---")
 st.caption("PalmOpsSim – Phase 4 UI Prototype | © 2026")
