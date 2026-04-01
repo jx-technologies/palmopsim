@@ -13,8 +13,10 @@ Built as a self-directed technical project, PalmOpsSim is designed for plantatio
 ![Replanting Strategy Comparison](screenshots/replanting_comparison.png)
 *How does replanting pace affect long-term production? Slow (5%), Standard (10%), and Fast (20%) replanting rates compared across all three management scenarios over 25 years.*
 
+
 ![Sensitivity Analysis](screenshots/sensitivity_analysis.png)
 *Which factors affect production the most? Red bars show the impact of reducing each factor, green bars show the impact of increasing it.*
+
 
 ---
 
