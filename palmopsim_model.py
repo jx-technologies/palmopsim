@@ -53,7 +53,7 @@ def run_simulation(
         random_seed = 42,
         climate_slider = 0, # (% adjustment to climate)
         pest_slider = 5, # (% yield loss from pests)
-        replant_rate = 0.05 # Max 5% of blocks replanted per year (reflects real operational constraints)
+        replant_rate = None # Change from 0.05 to None
 ):
     """
     Simulates FFB production for a managed oil palm estate over a defined period.
@@ -64,14 +64,22 @@ def run_simulation(
     """
     
     # Scenario configuration
+    # Make replanting rate scenario dependent
     if scenario_name == "Conservative":
         yield_adjustment = -0.10
+        if replant_rate is None:
+            replant_rate = 0.03 # Slow replanting - cost cautious
     elif scenario_name == "Moderate":
         yield_adjustment = 0.00
+        if replant_rate is None:
+            replant_rate = 0.05 # Standard replanting program
     elif scenario_name == "Aggressive":
         yield_adjustment = 0.10
+        if replant_rate is None:
+            replant_rate = 0.08 # Fast replanting  - Investing in future yield
     else:
         yield_adjustment = 0.00
+        replant_rate = 0.05
 
     np.random.seed(random_seed)
 
@@ -115,7 +123,7 @@ def run_simulation(
             # (18/2/2026): Added pest pressure
             # (2/3/2026): Modified pest impact to be stronger at higher yield
             block_variation = np.random.normal(1.0, 0.03) # Small per-block noise
-            harvest_efficiency = 0.95 if harvest_interval <= 12 else 0.88
+            harvest_efficiency = 1.0 - (harvest_interval - 6) * 0.01
             pest_pressure = pest_slider / 100 # Deterministic from slider
 
             yield_t_ha = max(adjusted_yield * climate_factor * block_variation, 0)
@@ -136,7 +144,7 @@ def run_simulation(
             block["Age"] += 1
 
             # (18/2/2026): Improve replanting logic
-            # Phase 5 Improvement (18/12/2026): New replanting logic - constrained rate per year
+            # Phase 5 Improvement (18/2/2026): New replanting logic - constrained rate per year
             # if block["Age"] > 28:
             #     # Replant block
             #     block["Age"] = 0
@@ -144,12 +152,12 @@ def run_simulation(
 
             # base_yield = base_yield_by_age(block["Age"])
 
-        # Phase 5 Improvement (18/12/2026): New Replanting logic
+        # Phase 5 Improvement (18/2/2026): New Replanting logic
         # Identify overaged blocks
         overaged_blocks = [b for b in blocks if b["Age"] > 28]
 
         # Replant only limited number (e.g. 5% of total blocks)
-        max_replant = max(1, int(replant_rate * num_blocks))
+        max_replant = max(1, round(replant_rate * num_blocks))
 
         if len(overaged_blocks) > 0:
             np.random.shuffle(overaged_blocks)
@@ -206,6 +214,8 @@ def run_sensitivity_analysis(
     low_params[factor_name] = low_value
     low_results = run_simulation(**low_params)
     low_ffb = low_results["total_ffb"]
+    
+    # 奥巴马想跟你谈恋爱
 
     # High variation
     high_params = base_params.copy()
